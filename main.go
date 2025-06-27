@@ -11,18 +11,19 @@ import (
     "github.com/cilium/ebpf/ringbuf"
     "github.com/cilium/ebpf/rlimit"
 
-	"tracer/cmd"
+    "tracer/cmd"
 )
 
 const SymbolName = "main.getUserByID"
 
 type UserEvent struct {
     UserID    int32  // Function parameter (user ID)
+    secondparam [64]byte
     Timestamp uint64 // Timestamp
 }
 
 type UserReturnEvent struct {
-    ReturnValue [64]byte // String return value
+    ReturnValue [64]byte // String return value (user name)
     Timestamp   uint64   // Timestamp
 }
 
@@ -31,7 +32,8 @@ func main() {
         log.Fatal(err)
     }
     
-    path := "./app/test"
+    // Path to your compiled application binary
+    path := "./app/test"  // Adjust this to match your binary location
     
     // Open in elf format in order to get the symbols
     ef, err := elf.Open(path)
@@ -67,7 +69,7 @@ func main() {
     
     // Process entry events in goroutine
     go func() {
-        countMap := map[int32]uint64{}
+        callCount := map[int32]uint64{}
         
         for {
             event, err := greetEvents.Read()
@@ -78,10 +80,16 @@ func main() {
             
             // Cast to UserEvent struct
             userEvent := (*UserEvent)(unsafe.Pointer(&event.RawSample[0]))
-            countMap[userEvent.UserID]++
+            callCount[userEvent.UserID]++
+
+            // secondStr := string(userEvent.secondparam[:])
+            // if nullIndex := strings.IndexByte(secondStr, 0); nullIndex != -1 {
+            //     secondStr = secondStr[:nullIndex]
+            // }
+            secondStr := extractValidString(userEvent.secondparam[:])
             
-            log.Printf("[ENTRY] User ID: %d, Count: %d, Timestamp: %d", 
-                userEvent.UserID, countMap[userEvent.UserID], userEvent.Timestamp)
+            log.Printf("[FUNCTION CALL] getUserByID(%d) - Call #%d - Timestamp: %d second param: %s", 
+                userEvent.UserID, callCount[userEvent.UserID], userEvent.Timestamp, secondStr)
         }
     }()
     
@@ -103,7 +111,7 @@ func main() {
                 returnStr = returnStr[:nullIndex]
             }
             
-            log.Printf("[RETURN] Return Value: %s, Timestamp: %d", 
+            log.Printf("[FUNCTION RETURN] getUserByID returned: '%s' - Timestamp: %d", 
                 returnStr, returnEvent.Timestamp)
         }
     }()
@@ -116,16 +124,31 @@ func main() {
     defer uprobeLink.Close()
     
     // Attach uretprobe using the generated program objects
-    uretprobeLink, err := ex.Uretprobe(SymbolName, objs.GoTestReturn, &link.UprobeOptions{})
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer uretprobeLink.Close()
+    // uretprobeLink, err := ex.Uretprobe(SymbolName, objs.GoTestReturn, &link.UprobeOptions{})
+    // if err != nil {
+    //     log.Fatal(err)
+    // }
+    // defer uretprobeLink.Close()
     
-    log.Printf("Successfully attached to %s. Press Ctrl+C to exit.", SymbolName)
+    log.Printf("✅ Successfully attached eBPF tracer to %s", SymbolName)
+    log.Printf("🔍 Monitoring getUserByID function calls...")
+    log.Printf("📡 Test by making requests to: http://localhost:8085/user/")
+    log.Printf("🛑 Press Ctrl+C to exit")
     
     // Keep the program running
     for {
         time.Sleep(time.Second)
     }
+}
+
+func extractValidString(data []byte) string {
+    var validBytes []byte
+    for _, b := range data {
+        if b >= 32 && b <= 126 { // Printable ASCII characters
+            validBytes = append(validBytes, b)
+        } else {
+            break // Stop at first non-printable character
+        }
+    }
+    return string(validBytes)
 }

@@ -7,16 +7,17 @@ char __license[] SEC("license") = "Dual MIT/GPL";
 #define GO_PARAM1(x) ((x)->ax)
 #define GO_PARAM2(x) ((x)->bx)
 #define GO_PARAM3(x) ((x)->cx)
+#define GO_PARAM4(x) ((x)->di)
 
 struct user_event {
     int user_id;
-    char something[64];
-    int timestamp;
+    char str[15];
+    long int timestamp;
 };
 
 struct user_return_event {
-    char return_value[64];  // Adjust size based on expected string length
-    int timestamp;
+    char return_value[64];  // String return value (user name)
+    long int timestamp;
 };
 
 struct {
@@ -33,12 +34,15 @@ SEC("uprobe/go_test")
 int BPF_UPROBE(go_test) {
     struct user_event *e;
     
+    /* reserve sample from BPF ringbuf */
     e = bpf_ringbuf_reserve(&greet_params, sizeof(*e), 0);
     if (!e)
         return 0;
     
-    e->user_id = (int)GO_PARAM1(ctx);
-    bpf_probe_read_str(&e->something, sizeof(e->something), (void*)GO_PARAM2(ctx));
+    /* fill in event data */
+    e->user_id = (int)GO_PARAM1(ctx);  // Read integer ID from first parameter
+    __builtin_memset(e->str, 0, sizeof(e->str));
+    bpf_probe_read_str(&e->str, sizeof(e->str), (void*)GO_PARAM2(ctx));  // Second param (string)
     e->timestamp = bpf_ktime_get_ns();
     
     bpf_ringbuf_submit(e, 0);
