@@ -13,7 +13,7 @@ import (
 func main() {
 	http.HandleFunc("/user/", getUserHandler)
 	log.Println("Starting server on :8085")
-	http.ListenAndServe(":8085", nil)
+	http.ListenAndServe(":8084", nil)
 }
 
 func getUserHandler(w http.ResponseWriter, r *http.Request) {
@@ -23,11 +23,11 @@ func getUserHandler(w http.ResponseWriter, r *http.Request) {
 		println("yes 2")
 	}
 	
-	user := getUserByID(1, "biggestString")
-	fmt.Fprintf(w, "User: %s \n", user)
+	user := getUserByID("Nikhil", "biggestString")
+	fmt.Fprintf(w, "User: %d \n", user)
 }
 
-func getUserByID(id int, str string) string {
+func getUserByID(name string, str string) int {
 	println(str)
 	db, err := sql.Open("sqlite3", "test.db")
 	if err != nil {
@@ -35,10 +35,10 @@ func getUserByID(id int, str string) string {
 	}
 	defer db.Close()
 
-	var name string
-	err = db.QueryRow("SELECT name FROM users WHERE id = ?", id).Scan(&name)
+	var id int
+	err = db.QueryRow("  SELECT id FROM users WHERE name = ?", name).Scan(&id)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return name
+	return id
 }
