@@ -11,6 +11,7 @@ char __license[] SEC("license") = "Dual MIT/GPL";
 #define GO_PARAM5(x) ((x)->dx)
 #define GO_PARAM6(x) ((x)->ip)
 #define GO_PARAM7(x) ((x)->sp)
+#define GO_ROUTINE(x) ((x)->r14)
 
 #define MAX_COPY 400
 #define MAX_STR_LEN 128
@@ -73,7 +74,7 @@ int BPF_UPROBE(go_test) {
     e->str[str_len & (MAX_STR_LEN - 1)] = '\0';
 
 
-    bpf_printk("user_id = %d, timestamp = %ld", e->Qlen, e->timestamp);
+    // bpf_printk("user_id = %d, timestamp = %ld", e->Qlen, e->timestamp);
 
     bpf_ringbuf_submit(e, 0);
     return 0;
@@ -81,17 +82,31 @@ int BPF_UPROBE(go_test) {
 
 
 SEC("uretprobe/go_test_return")
-int BPF_URETPROBE(go_test_return) {
-    // struct user_return_event *e;
-    // e = bpf_ringbuf_reserve(&return_params, sizeof(*e), 0);
-    // if (!e)
+int BPF_UPROBE(go_test_return) {
+    struct user_return_event *e;
+    __s64 raw_len;
+    __u32 str_len;
+    e = bpf_ringbuf_reserve(&return_params, sizeof(*e), 0);
+    if (!e)
+        return 0;
+
+    raw_len = GO_PARAM1(ctx);
+    // if (raw_len <= 0 || raw_len >= MAX_STR_LEN) {
+    //     bpf_ringbuf_discard(e, 0);
     //     return 0;
+    // }
 
-    // // bpf_probe_read_str(&e->return_value, sizeof(e->return_value), (void*)GO_PARAM1(ctx));
-    // e->timestamp = bpf_ktime_get_ns();
+    // str_len = (__u32)raw_len;
 
-    // bpf_ringbuf_submit(e, 0);
-    // return 0;
-    bpf_printk("uretprobe is triggered !\n");
+    // // Zero out buffer and read string with bounded length
+    // __builtin_memset(e->return_value, 0, sizeof(e->return_value));
+
+    bpf_probe_read_str(&e->return_value, 2, (void*)GO_PARAM1(ctx));
+    // e->return_value[str_len & (MAX_STR_LEN - 1)] = '\0';
+
+    e->timestamp = bpf_ktime_get_ns();
+    bpf_ringbuf_submit(e, 0);
+    bpf_printk("uretprobe triggered! return value = %d\n", raw_len);
     return 0;
 }
+

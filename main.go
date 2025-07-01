@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -19,6 +20,11 @@ var bootTime time.Time
 
 const SymbolName = "database/sql.(*DB).QueryRow"
 
+var (
+	startTime time.Time
+	endTime   time.Time
+)
+
 type UserEvent struct {
 	Timestamp uint64 // Timestamp
 	QueryLen  uint32 // Function parameter (user ID)
@@ -26,7 +32,6 @@ type UserEvent struct {
 }
 
 type UserReturnEvent struct {
-	UserID      int32    // Function parameter (user ID)
 	ReturnValue [64]byte // String return value (user name)
 	Timestamp   uint64   // Timestamp
 }
@@ -95,7 +100,9 @@ func main() {
 			// Query := extractValidString(userEvent.Query[:])
 
 			log.Printf("[FUNCTION CALL] : Timestamp: %s - QueryRow %s - Query len: %d",
-				bootTime.Add(time.Duration(userEvent.Timestamp)).Format(time.RFC3339), secondStr, userEvent.QueryLen)
+				bootTime.Add(time.Duration(userEvent.Timestamp)).Format(time.RFC3339Nano), secondStr, userEvent.QueryLen)
+
+			startTime = bootTime.Add(time.Duration(userEvent.Timestamp))
 		}
 	}()
 
@@ -117,8 +124,14 @@ func main() {
 				returnStr = returnStr[:nullIndex]
 			}
 
-			log.Printf("[FUNCTION RETURN] getUserByID returned: '%s' - Timestamp: %d",
-				returnStr, returnEvent.Timestamp)
+			log.Printf("[FUNCTION RETURN] getUserByID returned: '%s' - Timestamp: %s",
+				returnStr, bootTime.Add(time.Duration(returnEvent.Timestamp)).Format(time.RFC3339Nano))
+
+			endTime = bootTime.Add(time.Duration(returnEvent.Timestamp))
+			executionTime := endTime.Sub(startTime)
+			executionTimeStr := fmt.Sprintf("%d.%09d seconds", int64(executionTime.Seconds()), int64(executionTime.Nanoseconds())%1e9)
+
+			log.Printf("function execution time %s", executionTimeStr)
 		}
 	}()
 
@@ -129,11 +142,11 @@ func main() {
 	defer uprobeLink.Close()
 
 	// Attach uretprobe using the generated program objects
-	// uretprobeLink, err := ex.Uretprobe(SymbolName, objs.GoTestReturn, &link.UprobeOptions{})
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// defer uretprobeLink.Close()
+	uretprobeLink, err := ex.Uprobe(SymbolName, objs.GoTestReturn, &link.UprobeOptions{Offset: 0xA0})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer uretprobeLink.Close()
 
 	log.Printf("✅ Successfully attached eBPF tracer to %s", SymbolName)
 	log.Printf("🔍 Monitoring getUserByID function calls...")

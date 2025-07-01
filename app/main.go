@@ -6,12 +6,22 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
 func main() {
 	http.HandleFunc("/user/", getUserHandler)
+	sample()
+	time.Sleep(1 * time.Second)
+	sample()
+	time.Sleep(1 * time.Second)
+	sample()
+	time.Sleep(1 * time.Second)
+	sample()
+	time.Sleep(1 * time.Second)
+	sample()
 	log.Println("Starting server on :8085")
 	http.ListenAndServe(":8084", nil)
 }
@@ -23,11 +33,11 @@ func getUserHandler(w http.ResponseWriter, r *http.Request) {
 		println("yes 2")
 	}
 	
-	user := getUserByID("Nikhil", "biggestString")
-	fmt.Fprintf(w, "User: %d \n", user)
+	user := getUserByID(1, "biggestString")
+	fmt.Fprintf(w, "User: %s \n", user)
 }
 
-func getUserByID(name string, str string) int {
+func getUserByID(id int, str string) string {
 	println(str)
 	db, err := sql.Open("sqlite3", "test.db")
 	if err != nil {
@@ -35,10 +45,15 @@ func getUserByID(name string, str string) int {
 	}
 	defer db.Close()
 
-	var id int
-	err = db.QueryRow("  SELECT id FROM users WHERE name = ?", name).Scan(&id)
+	var name string
+	err = db.QueryRow("SELECT name FROM users WHERE id = ?", id).Scan(&name)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return id
+	return name
+}
+
+func sample() string {
+	println("sample")
+	return "yo"
 }
